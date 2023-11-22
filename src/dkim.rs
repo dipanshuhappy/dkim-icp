@@ -448,33 +448,6 @@ impl<'a> PublicKey<'a> {
             notes,
         }
     }
-
-    /// Loads a public key from the DNS.
-    pub fn load(selector: &str, domain: &str) -> Result<Vec<String>, PublicKeyParsingError<'a>> {
-        use trust_dns_resolver::config::*;
-        use trust_dns_resolver::Resolver;
-
-        let resolver = Resolver::new(ResolverConfig::default(), ResolverOpts::default()).unwrap();
-        let txt_fields = resolver
-            .txt_lookup(&format!("{}._domainkey.{}", selector, domain))
-            .unwrap();
-
-        let mut records = Vec::new();
-        for packets in txt_fields.iter().map(|data| data.txt_data()) {
-            let mut response = Vec::new();
-            for packet in packets {
-                response.extend(packet.iter());
-            }
-            let response = String::from_utf8(response).unwrap();
-            records.push(response);
-        }
-
-        if records.is_empty() {
-            Err(PublicKeyParsingError::MissingRecord)
-        } else {
-            Ok(records)
-        }
-    }
 }
 
 #[cfg(test)]
@@ -490,8 +463,6 @@ mod tests {
         println!("{:?}", header.original.unwrap());
     }
 
-    #[test]
-    fn get_dkim_record() {
-        println!("{:?}", PublicKey::load("20161025", "gmail.com").unwrap());
-    }
+    
+    
 }
