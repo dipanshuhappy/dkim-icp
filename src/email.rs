@@ -5,6 +5,7 @@ use crate::{
     hash::*,
 };
 use email_parser::parser::parse_message_with_separators;
+use rsa::pkcs8::FromPublicKey;
 use std::convert::TryFrom;
 
 /// The mail struct used to sign or verify a mail.
@@ -33,7 +34,7 @@ impl<'a> Email<'a> {
 
     /// Verify the mail using an existing public key (does not use the DNS).
     pub fn verify_with_public_key(&self, public_key: &PublicKey) -> Result<(), VerificationError> {
-        use rsa::{PublicKey, RSAPublicKey};
+        use rsa::{PublicKey, RsaPublicKey};
 
         let header = match &self.dkim_header {
             Some(dkim_header) => dkim_header,
@@ -84,7 +85,8 @@ impl<'a> Email<'a> {
         };
 
         // verifying
-        let public_key = RSAPublicKey::from_pkcs8(&public_key.key_data).unwrap();
+        let public_key = RsaPublicKey::from_public_key_der(&public_key.key_data).unwrap();
+        
         public_key.verify(
             rsa::PaddingScheme::PKCS1v15Sign {
                 hash: Some(match header.algorithm {
@@ -103,7 +105,7 @@ impl<'a> Email<'a> {
     pub fn sign(
         &mut self,
         mut header: DkimHeader,
-        private_key: &rsa::RSAPrivateKey,
+        private_key: &rsa::RsaPrivateKey,
     ) -> Result<String, VerificationError> {
         // canonicalization
         let mut body = match header.canonicalization.0 {
@@ -214,6 +216,8 @@ impl<'a> TryFrom<&'a str> for Email<'a> {
 
 #[cfg(test)]
 mod test {
+    use rsa::pkcs1::FromRsaPrivateKey;
+
     use super::*;
 
     #[test]
@@ -222,7 +226,7 @@ mod test {
         let mut mail = Email::try_from(mail).unwrap();
 
         let key = base64::decode("MIIEowIBAAKCAQEAgxoGICfYbPE2Z75oNqCxt559UcIOBuh6RmvIrAWSIgGfFHGFiksNS/uRNOM+JAHh7UbHZtCdT5nYpNuIFboOH8TxGVw58D3dFoi97llInbHpuxcQMmVErHiEZ/5rWtCKjBE851EFU4G/1YwR+PsO7/lB5+VnU3yb0s4YcbalsY+5IKIO/ocVXBaWqu471hGAPs4GyziuZ/I40xd5N2qi5Ws9uWOnJ/NFeuKCK+l7jOY0catqheft95CIVPR0d5ihuM1bRjS/mOKhDlj/ru8emmaCzeqToUshl8LT4HZ3YVhFiM1NEj7OYDcQibIFd61ENNHc21+TOwLq3pvSZN96vwIDAQABAoIBAQCAzyXrnBqZ11m0DrGH0tUp6w+IL9jmUq4o2Ke+1G5i+SLazDr/yIPU/uQJiag5apwXLG6ohxm45xijyYpohnhwIGkemK3YbH/4Lvwl3hVp0y8pghyI11Tk/DhjkObbwIAP5LPpNoK8LIRWBZx2+/0OLOHjPVMLBSh4s8PynhkoXfT1ej3PGh29SWr0fntxwR1O3dwxq5zD9xUL4h7ngT796YOr7C26z4rS9znwvR0jdA7bIrRHF/XKHFq6dLgu7USzfP+64YKPqfv/Kw1NmA04li5+2Yu3CPL+Qf7Wqi5AvxzlQ45IcVdQeD9FizUcfREKQXTE6QSQLomWspy6H/W5AoGBAOIMCbPcUiiDgigob/8z2DkWiRggyY9yOxZHl05KDe10GOdSs567wacB1RVonZf2iwmTyBQRePrWiamzF0HCrPhF5vOx9RgNiz6PdDr6+i5w8uIXcNbieqG6tI0hlkXUZcOhu3778lLwOyw4hcdqsZK30UAmPriXRn50skgnxtwTAoGBAJR5QFtBaI3sn+2waSx8xTPuS3bR37cespYwxzr6h3McfGPnpfrOTSX3kDbVHoztL1N4TGb1c8TMvb67X9ls81AKP6J0tFPxPp4PJeuicDrJlnVqzDcTYAvfDjtzs/PBoszBfECkq6NHXq1ozG7fp8ekxf+Fug5i+7Su6fWw9SQlAoGAMcOsrygl/j1VfjnIzko/o/HOJL2zIh1n3LPOH7I19rzEbsjKOnvjWj0RCDGL4FSqr2UVezWNiMuKaw2+ZP/SzKW2/peC+dShfxhd4k42ndrH3faDJQufK9PKw/dM+fqUnMkSWhZldtTkcgvPh+N5TG+jZZgF3uWO43AVf8UiBnkCgYBLjeBID+Lqxg0kYW9D6kJYCN1yG57iisaKU0wvISooU8ig9lKqbK0psu86V/1x7Yj1yvPmOOWushmko6lE9YJjqrNzMjxJsywQNtkvLbw6zja4jZ5aMIvhvqJ5comSc2krFRLrumB1eG4fhILzsPCqUZlITH6/r3MzIQeBtYkp2QKBgDkgpa0c+ep3020iOIjFzE9in2reyAj5Kvwh1li8TGrndh3pj4OL7+Qp4Dl0ndetcB+PoMN627haxbMkQMU3+yfBJH/lLWzP/o8DFuqlCC1YniUpof0G0gJsMZR/+v4FjBnrB4guXbmC7emQ/EZ9mybnc+ilN9vn6okAZ9zsGxTk").unwrap();
-        let key = rsa::RSAPrivateKey::from_pkcs1(&key).unwrap();
+        let key = rsa::RsaPrivateKey::from_pkcs1_der(&key).unwrap();
 
         let mail = mail
             .sign(DkimHeader::new("mubelotix.dev", "common"), &key)
@@ -247,7 +251,7 @@ mod test {
         let mut mail = Email::try_from(mail).unwrap();
 
         let key = base64::decode("MIIEowIBAAKCAQEAgxoGICfYbPE2Z75oNqCxt559UcIOBuh6RmvIrAWSIgGfFHGFiksNS/uRNOM+JAHh7UbHZtCdT5nYpNuIFboOH8TxGVw58D3dFoi97llInbHpuxcQMmVErHiEZ/5rWtCKjBE851EFU4G/1YwR+PsO7/lB5+VnU3yb0s4YcbalsY+5IKIO/ocVXBaWqu471hGAPs4GyziuZ/I40xd5N2qi5Ws9uWOnJ/NFeuKCK+l7jOY0catqheft95CIVPR0d5ihuM1bRjS/mOKhDlj/ru8emmaCzeqToUshl8LT4HZ3YVhFiM1NEj7OYDcQibIFd61ENNHc21+TOwLq3pvSZN96vwIDAQABAoIBAQCAzyXrnBqZ11m0DrGH0tUp6w+IL9jmUq4o2Ke+1G5i+SLazDr/yIPU/uQJiag5apwXLG6ohxm45xijyYpohnhwIGkemK3YbH/4Lvwl3hVp0y8pghyI11Tk/DhjkObbwIAP5LPpNoK8LIRWBZx2+/0OLOHjPVMLBSh4s8PynhkoXfT1ej3PGh29SWr0fntxwR1O3dwxq5zD9xUL4h7ngT796YOr7C26z4rS9znwvR0jdA7bIrRHF/XKHFq6dLgu7USzfP+64YKPqfv/Kw1NmA04li5+2Yu3CPL+Qf7Wqi5AvxzlQ45IcVdQeD9FizUcfREKQXTE6QSQLomWspy6H/W5AoGBAOIMCbPcUiiDgigob/8z2DkWiRggyY9yOxZHl05KDe10GOdSs567wacB1RVonZf2iwmTyBQRePrWiamzF0HCrPhF5vOx9RgNiz6PdDr6+i5w8uIXcNbieqG6tI0hlkXUZcOhu3778lLwOyw4hcdqsZK30UAmPriXRn50skgnxtwTAoGBAJR5QFtBaI3sn+2waSx8xTPuS3bR37cespYwxzr6h3McfGPnpfrOTSX3kDbVHoztL1N4TGb1c8TMvb67X9ls81AKP6J0tFPxPp4PJeuicDrJlnVqzDcTYAvfDjtzs/PBoszBfECkq6NHXq1ozG7fp8ekxf+Fug5i+7Su6fWw9SQlAoGAMcOsrygl/j1VfjnIzko/o/HOJL2zIh1n3LPOH7I19rzEbsjKOnvjWj0RCDGL4FSqr2UVezWNiMuKaw2+ZP/SzKW2/peC+dShfxhd4k42ndrH3faDJQufK9PKw/dM+fqUnMkSWhZldtTkcgvPh+N5TG+jZZgF3uWO43AVf8UiBnkCgYBLjeBID+Lqxg0kYW9D6kJYCN1yG57iisaKU0wvISooU8ig9lKqbK0psu86V/1x7Yj1yvPmOOWushmko6lE9YJjqrNzMjxJsywQNtkvLbw6zja4jZ5aMIvhvqJ5comSc2krFRLrumB1eG4fhILzsPCqUZlITH6/r3MzIQeBtYkp2QKBgDkgpa0c+ep3020iOIjFzE9in2reyAj5Kvwh1li8TGrndh3pj4OL7+Qp4Dl0ndetcB+PoMN627haxbMkQMU3+yfBJH/lLWzP/o8DFuqlCC1YniUpof0G0gJsMZR/+v4FjBnrB4guXbmC7emQ/EZ9mybnc+ilN9vn6okAZ9zsGxTk").unwrap();
-        let key = rsa::RSAPrivateKey::from_pkcs1(&key).unwrap();
+        let key = rsa::RsaPrivateKey::from_pkcs1_der(&key).unwrap();
 
         let mail = mail
             .sign(
@@ -276,7 +280,7 @@ mod test {
         let mut mail = Email::try_from(mail).unwrap();
 
         let key = base64::decode("MIIEowIBAAKCAQEAgxoGICfYbPE2Z75oNqCxt559UcIOBuh6RmvIrAWSIgGfFHGFiksNS/uRNOM+JAHh7UbHZtCdT5nYpNuIFboOH8TxGVw58D3dFoi97llInbHpuxcQMmVErHiEZ/5rWtCKjBE851EFU4G/1YwR+PsO7/lB5+VnU3yb0s4YcbalsY+5IKIO/ocVXBaWqu471hGAPs4GyziuZ/I40xd5N2qi5Ws9uWOnJ/NFeuKCK+l7jOY0catqheft95CIVPR0d5ihuM1bRjS/mOKhDlj/ru8emmaCzeqToUshl8LT4HZ3YVhFiM1NEj7OYDcQibIFd61ENNHc21+TOwLq3pvSZN96vwIDAQABAoIBAQCAzyXrnBqZ11m0DrGH0tUp6w+IL9jmUq4o2Ke+1G5i+SLazDr/yIPU/uQJiag5apwXLG6ohxm45xijyYpohnhwIGkemK3YbH/4Lvwl3hVp0y8pghyI11Tk/DhjkObbwIAP5LPpNoK8LIRWBZx2+/0OLOHjPVMLBSh4s8PynhkoXfT1ej3PGh29SWr0fntxwR1O3dwxq5zD9xUL4h7ngT796YOr7C26z4rS9znwvR0jdA7bIrRHF/XKHFq6dLgu7USzfP+64YKPqfv/Kw1NmA04li5+2Yu3CPL+Qf7Wqi5AvxzlQ45IcVdQeD9FizUcfREKQXTE6QSQLomWspy6H/W5AoGBAOIMCbPcUiiDgigob/8z2DkWiRggyY9yOxZHl05KDe10GOdSs567wacB1RVonZf2iwmTyBQRePrWiamzF0HCrPhF5vOx9RgNiz6PdDr6+i5w8uIXcNbieqG6tI0hlkXUZcOhu3778lLwOyw4hcdqsZK30UAmPriXRn50skgnxtwTAoGBAJR5QFtBaI3sn+2waSx8xTPuS3bR37cespYwxzr6h3McfGPnpfrOTSX3kDbVHoztL1N4TGb1c8TMvb67X9ls81AKP6J0tFPxPp4PJeuicDrJlnVqzDcTYAvfDjtzs/PBoszBfECkq6NHXq1ozG7fp8ekxf+Fug5i+7Su6fWw9SQlAoGAMcOsrygl/j1VfjnIzko/o/HOJL2zIh1n3LPOH7I19rzEbsjKOnvjWj0RCDGL4FSqr2UVezWNiMuKaw2+ZP/SzKW2/peC+dShfxhd4k42ndrH3faDJQufK9PKw/dM+fqUnMkSWhZldtTkcgvPh+N5TG+jZZgF3uWO43AVf8UiBnkCgYBLjeBID+Lqxg0kYW9D6kJYCN1yG57iisaKU0wvISooU8ig9lKqbK0psu86V/1x7Yj1yvPmOOWushmko6lE9YJjqrNzMjxJsywQNtkvLbw6zja4jZ5aMIvhvqJ5comSc2krFRLrumB1eG4fhILzsPCqUZlITH6/r3MzIQeBtYkp2QKBgDkgpa0c+ep3020iOIjFzE9in2reyAj5Kvwh1li8TGrndh3pj4OL7+Qp4Dl0ndetcB+PoMN627haxbMkQMU3+yfBJH/lLWzP/o8DFuqlCC1YniUpof0G0gJsMZR/+v4FjBnrB4guXbmC7emQ/EZ9mybnc+ilN9vn6okAZ9zsGxTk").unwrap();
-        let key = rsa::RSAPrivateKey::from_pkcs1(&key).unwrap();
+        let key = rsa::RsaPrivateKey::from_pkcs1_der(&key).unwrap();
 
         let mail = mail
             .sign(
